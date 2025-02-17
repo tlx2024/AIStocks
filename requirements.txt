@@ -1,0 +1,10 @@
+pandas
+tushare
+akshare
+matplotlib
+openpyxl
+baostock
+yfinance
+apscheduler
+pyyaml
+talib-binary>=0.4.24
