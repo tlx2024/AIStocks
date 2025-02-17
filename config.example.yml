@@ -1,0 +1,21 @@
+api:
+  tushare:
+    token: "你的api key"
+  deepseek:
+    api_key: "你的api key"
+    endpoint: "https://api.deepseek.com/v1/chat/completions"
+
+# 数据缓存配置
+cache:
+  directory: "data_cache"
+  use_cache: true
+
+# 策略参数配置
+strategy:
+  min_price: 5.0           # 最小股价
+  max_price: 100.0         # 最大股价
+  min_turnover: 1.0        # 最小换手率
+  min_market_cap: 1.0e9    # 最小市值（10亿）
+  max_pe: 100.0           # 最大市盈率
+  min_return: -20.0       # 最小20日收益率
+  min_volume: 1.0e7       # 最小成交量（1千万）

@@ -55,7 +55,10 @@ pip install -r requirements.txt
 cp config.example.yml config.yml
 
 # 启动监控系统
-python -m core.monitor
+python monitor.py
+
+# 启动策略系统
+python main.py  --strategy enhanced
 ```
 
 ## 配置说明
