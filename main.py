@@ -5,6 +5,7 @@ from data_fetcher import fetch_stock_data, fetch_fundamental_data
 from strategy import BasicStrategy, EnhancedQuantStrategy
 from report_generator import generate_report
 from market_analysis import MarketAnalyzer
+from main_menu import MainMenu
 
 def parse_args():
     parser = argparse.ArgumentParser(description='股票交易策略系统')
@@ -93,5 +94,10 @@ def main():
     except Exception as e:
         print(f"运行策略出错: {str(e)}")
 
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    menu = MainMenu()
+    while True:
+        choice = menu.show_main_menu()
+        if choice.upper() == "Q":
+            break
+        menu.handle_choice(choice)

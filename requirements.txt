@@ -1,10 +1,13 @@
 pandas
-tushare
+numpy
+requests
+apscheduler
+rich
 akshare
+python-dateutil
+tushare
 matplotlib
 openpyxl
 baostock
 yfinance
-apscheduler
 pyyaml
-talib-binary>=0.4.24

@@ -1,0 +1,11 @@
+config.yml
+.windsurfrules
+.eggs/
+dist/
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+__tmp/*
+*.pyi
+node_modules

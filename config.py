@@ -26,7 +26,9 @@ STRATEGY_CONFIG = {
     'min_market_cap': _config['strategy']['min_market_cap'],
     'max_pe': _config['strategy']['max_pe'],
     'min_return': _config['strategy']['min_return'],
-    'min_volume': _config['strategy']['min_volume']
+    'min_volume': _config['strategy']['min_volume'],
+    'take_profit': 1.1,  # 止盈比例，默认为1.1（10%收益）
+    'stop_loss': 0.95    # 止损比例，默认为0.95（5%损失）
 }
 
 # 市场分析配置

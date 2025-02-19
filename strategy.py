@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 from config import STRATEGY_CONFIG
 from data_fetcher import fetch_fundamental_data
+from datetime import datetime, timedelta
+import akshare as ak
 
 class BasicStrategy:
     def __init__(self):
@@ -102,174 +104,168 @@ class BasicStrategy:
         
         return signals
 
-class EnhancedQuantStrategy(BasicStrategy):
+class EnhancedQuantStrategy:
     def __init__(self):
-        super().__init__()  # 确保调用父类的初始化方法
-        # 因子权重
-        self.factor_weights = {
-            'momentum': 0.3,    # 动量因子权重
-            'value': 0.3,      # 估值因子权重
-            'quality': 0.2,    # 质量因子权重
-            'sentiment': 0.2   # 情绪因子权重
-        }
+        self.config = STRATEGY_CONFIG
         
-        # 使用从config.py导入的STRATEGY_CONFIG
-        self.conditions = self.config
-    
-    def calculate_advanced_factors(self, data):
-        """计算高级因子"""
+    def analyze_stock(self, symbol):
         try:
-            print("\n开始计算多因子...")
+            # 确保股票代码格式正确
+            if not symbol.startswith(('600', '601', '602', '603', '605', '688', '000', '002', '300')):
+                raise ValueError("无效的股票代码格式")
             
-            # 确保数据按日期和股票代码排序
-            data = data.sort_values(['交易日期', '股票代码'])
+            # 获取更长时间范围的历史数据
+            end_date = datetime.now().strftime('%Y%m%d')
+            start_date = (datetime.now() - timedelta(days=180)).strftime('%Y%m%d')
             
-            # 创建因子列
-            data['20D_Return'] = np.nan
-            data['Volume_5D'] = np.nan
-            data['Turnover_5D'] = np.nan
-            data['Volatility_20D'] = np.nan
-            data['MA5'] = np.nan
-            data['MA20'] = np.nan
-            data['Trend'] = np.nan
+            # 获取股票数据
+            df = ak.stock_zh_a_hist(symbol=symbol, period="daily",
+                                  start_date=start_date, end_date=end_date,
+                                  adjust="qfq")
             
-            # 按股票分组计算
-            grouped = data.groupby('股票代码')
+            if df.empty or len(df) < 30:
+                raise ValueError("获取不到足够的历史数据")
             
-            # 1. 动量因子 - 20日收益率
-            data['20D_Return'] = grouped['收盘价'].transform(lambda x: x.pct_change(20))
+            # 重命名列
+            df = df.rename(columns={
+                '日期': 'date',
+                '开盘': 'open',
+                '收盘': 'close',
+                '最高': 'high',
+                '最低': 'low',
+                '成交量': 'volume'
+            })
             
-            # 2. 成交量因子
-            data['Volume_5D'] = grouped['成交量'].transform(lambda x: x.rolling(5).mean())
-            data['Turnover_5D'] = grouped['换手率'].transform(lambda x: x.rolling(5).mean())
+            # 确保按日期排序
+            df = df.sort_values('date')
             
-            # 3. 波动率因子
-            data['Volatility_20D'] = grouped['涨跌幅'].transform(lambda x: x.rolling(20).std())
+            # 计算技术指标
+            analysis = self._calculate_indicators(df)
             
-            # 4. 趋势因子
-            data['MA5'] = grouped['收盘价'].transform(lambda x: x.rolling(5).mean())
-            data['MA20'] = grouped['收盘价'].transform(lambda x: x.rolling(20).mean())
-            data['Trend'] = data['MA5'] / data['MA20'] - 1
-            
-            # 获取最新日期的数据
-            latest_date = data['交易日期'].max()
-            latest_data = data[data['交易日期'] == latest_date]
-            
-            # 打印因子范围
-            print(f"动量因子计算完成，20日收益率范围: {latest_data['20D_Return'].min():.2f}% 到 {latest_data['20D_Return'].max():.2f}%")
-            print(f"5日平均成交量范围: {latest_data['Volume_5D'].min():.2e} 到 {latest_data['Volume_5D'].max():.2e}")
-            print(f"5日平均换手率范围: {latest_data['Turnover_5D'].min():.2f}% 到 {latest_data['Turnover_5D'].max():.2f}%")
-            print(f"20日波动率范围: {latest_data['Volatility_20D'].min():.2f}% 到 {latest_data['Volatility_20D'].max():.2f}%")
-            print(f"趋势因子范围: {latest_data['Trend'].min():.2f} 到 {latest_data['Trend'].max():.2f}")
-            
-            # 数据质量检查
-            print("\n数据质量检查:")
-            for col in ['20D_Return', 'Volume_5D', 'Turnover_5D', 'Volatility_20D', 'Trend']:
-                missing = latest_data[col].isna().sum()
-                if missing > 0:
-                    print(f"警告: {col} 有 {missing} 个缺失值")
-            
-            return data
+            # 生成分析报告
+            report = self._generate_analysis_report(analysis, symbol)
+            return report
             
         except Exception as e:
-            print(f"因子计算出错: {e}")
-            import traceback
-            traceback.print_exc()
-            return data
+            raise Exception(f"增强策略分析失败: {str(e)}")
     
-    def generate_enhanced_signals(self, data):
-        """生成增强版交易信号"""
-        print("\n开始生成交易信号...")
-        try:
-            # 填充缺失值
-            factor_cols = ['20D_Return', 'Turnover_5D', 'Volatility_20D', 'Trend']
-            for col in factor_cols:
-                if col in data.columns:
-                    median_val = data[col].median()
-                    data[col] = data[col].fillna(median_val)
+    def _calculate_indicators(self, df):
+        """计算各种技术指标"""
+        # 计算移动平均线
+        df['MA5'] = df['close'].rolling(window=5).mean()
+        df['MA10'] = df['close'].rolling(window=10).mean()
+        df['MA20'] = df['close'].rolling(window=20).mean()
+        df['MA60'] = df['close'].rolling(window=60).mean()
+        
+        # 计算MACD
+        exp1 = df['close'].ewm(span=12, adjust=False).mean()
+        exp2 = df['close'].ewm(span=26, adjust=False).mean()
+        df['MACD'] = exp1 - exp2
+        df['Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
+        df['MACD_Hist'] = df['MACD'] - df['Signal']
+        
+        # 计算RSI
+        delta = df['close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / loss
+        df['RSI'] = 100 - (100 / (1 + rs))
+        
+        # 计算布林带
+        df['BB_middle'] = df['close'].rolling(window=20).mean()
+        df['BB_upper'] = df['BB_middle'] + 2 * df['close'].rolling(window=20).std()
+        df['BB_lower'] = df['BB_middle'] - 2 * df['close'].rolling(window=20).std()
+        
+        # 获取最新数据
+        latest = df.iloc[-1]
+        prev = df.iloc[-2]
+        
+        return {
+            'latest_price': latest['close'],
+            'prev_price': prev['close'],
+            'change_pct': ((latest['close'] - prev['close']) / prev['close'] * 100),
+            'volume': latest['volume'],
+            'ma5': latest['MA5'],
+            'ma10': latest['MA10'],
+            'ma20': latest['MA20'],
+            'ma60': latest['MA60'],
+            'rsi': latest['RSI'],
+            'macd': latest['MACD'],
+            'macd_signal': latest['Signal'],
+            'macd_hist': latest['MACD_Hist'],
+            'bb_upper': latest['BB_upper'],
+            'bb_middle': latest['BB_middle'],
+            'bb_lower': latest['BB_lower'],
+            'date': latest['date']
+        }
+    
+    def _generate_analysis_report(self, analysis, symbol):
+        """生成详细的分析报告"""
+        report = []
+        report.append(f"=== {symbol} 增强量化分析报告 ===\n")
+        
+        # 价格信息
+        report.append(f"当前价格: {analysis['latest_price']:.2f}")
+        report.append(f"涨跌幅: {analysis['change_pct']:.2f}%")
+        report.append(f"成交量: {analysis['volume']/10000:.2f}万")
+        
+        # 趋势分析
+        report.append("\n=== 趋势分析 ===")
+        if analysis['latest_price'] > analysis['ma60']:
+            report.append("- 长期趋势：上升")
+        else:
+            report.append("- 长期趋势：下降")
             
-            # 处理极端值
-            for col in factor_cols:
-                if col in data.columns:
-                    # 计算上下四分位数
-                    Q1 = data[col].quantile(0.25)
-                    Q3 = data[col].quantile(0.75)
-                    IQR = Q3 - Q1
-                    
-                    # 定义极端值边界
-                    lower_bound = Q1 - 1.5 * IQR
-                    upper_bound = Q3 + 1.5 * IQR
-                    
-                    # 处理极端值
-                    data[col] = data[col].clip(lower_bound, upper_bound)
+        if analysis['latest_price'] > analysis['ma20']:
+            report.append("- 中期趋势：上升")
+        else:
+            report.append("- 中期趋势：下降")
             
-            # 数据标准化
-            weights = {
-                '20D_Return': self.factor_weights['momentum'],
-                'Turnover_5D': self.factor_weights['value'],
-                'Volatility_20D': -self.factor_weights['quality'],  # 波动率越小越好
-                'Trend': self.factor_weights['sentiment']
-            }
-            
-            # 标准化并计算综合得分
-            composite_score = 0
-            for col in factor_cols:
-                if col in data.columns:
-                    # 标准化
-                    mean = data[col].mean()
-                    std = data[col].std()
-                    if std != 0:
-                        data[f'{col}_Z'] = (data[col] - mean) / std
-                        # 累加到综合得分
-                        composite_score += data[f'{col}_Z'] * weights[col]
-                        print(f"{col} Z-score范围: {data[f'{col}_Z'].min():.2f} 到 {data[f'{col}_Z'].max():.2f}")
-                    else:
-                        data[f'{col}_Z'] = 0
-                        print(f"{col} Z-score范围: 0 到 0 (标准差为0)")
-            
-            # 保存综合得分
-            data['Composite_Score'] = composite_score
-            
-            print(f"\n综合得分范围: {data['Composite_Score'].min():.2f} 到 {data['Composite_Score'].max():.2f}")
-            
-            # 初次筛选 - 使用相对宽松的条件
-            signals = data[
-                (data['收盘价'] >= 5.0) &  # 最低价格限制
-                (data['成交量'] >= 1e6) &  # 最低成交量100万
-                (data['换手率'] >= 0.5) &  # 最低换手率0.5%
-                (data['Volatility_20D'] <= 0.2)  # 波动率限制20%
-            ].copy()
-            
-            print(f"\n初次筛选后剩余股票数: {len(signals)}")
-            
-            if len(signals) < 10:
-                print("股票数量不足，使用更宽松的条件...")
-                # 使用非常宽松的条件
-                signals = data[
-                    (data['收盘价'] >= 3.0) &  # 降低最低价格限制
-                    (data['成交量'] >= 5e5) &  # 降低最低成交量到50万
-                    (data['换手率'] >= 0.3)  # 降低最低换手率到0.3%
-                ].copy()
-                print(f"最终筛选后剩余股票数: {len(signals)}")
-            
-            if len(signals) > 0:
-                # 按综合得分排序
-                signals = signals.sort_values('Composite_Score', ascending=False)
-                # 只保留前30只股票
-                signals = signals.head(30)
-                
-                # 打印选股结果
-                print("\n选股结果:")
-                result_cols = ['股票代码', '股票名称', '收盘价', '涨跌幅', '换手率', 'Composite_Score']
-                print(signals[result_cols].to_string())
-                
-                return signals
-            else:
-                print("没有找到符合条件的股票")
-                return pd.DataFrame()
-                
-        except Exception as e:
-            print(f"信号生成出错: {e}")
-            import traceback
-            traceback.print_exc()
-            return pd.DataFrame()
+        if analysis['latest_price'] > analysis['ma5']:
+            report.append("- 短期趋势：上升")
+        else:
+            report.append("- 短期趋势：下降")
+        
+        # MACD分析
+        report.append("\n=== MACD分析 ===")
+        if analysis['macd'] > analysis['macd_signal']:
+            report.append("- MACD金叉形成，买入信号")
+        else:
+            report.append("- MACD死叉形成，卖出信号")
+        
+        # RSI分析
+        report.append("\n=== RSI分析 ===")
+        rsi = analysis['rsi']
+        if rsi > 70:
+            report.append("- RSI超买（%.2f），注意回调风险" % rsi)
+        elif rsi < 30:
+            report.append("- RSI超卖（%.2f），可能存在反弹机会" % rsi)
+        else:
+            report.append("- RSI处于中性区间（%.2f）" % rsi)
+        
+        # 布林带分析
+        report.append("\n=== 布林带分析 ===")
+        if analysis['latest_price'] > analysis['bb_upper']:
+            report.append("- 股价突破布林带上轨，超买状态")
+        elif analysis['latest_price'] < analysis['bb_lower']:
+            report.append("- 股价突破布林带下轨，超卖状态")
+        else:
+            report.append("- 股价在布林带中轨附近波动")
+        
+        # 投资建议
+        report.append("\n=== 投资建议 ===")
+        if (analysis['latest_price'] > analysis['ma20'] and 
+            analysis['macd'] > analysis['macd_signal'] and 
+            30 < analysis['rsi'] < 70):
+            report.append("1. 多头行情，可以考虑持有或逢低买入")
+            report.append("2. 建议止损位设置在MA20下方")
+        elif (analysis['latest_price'] < analysis['ma20'] and 
+              analysis['macd'] < analysis['macd_signal'] and 
+              analysis['rsi'] > 70):
+            report.append("1. 空头行情，建议减持或观望")
+            report.append("2. 等待企稳信号后再考虑入场")
+        else:
+            report.append("1. 目前处于震荡整理阶段")
+            report.append("2. 建议观望，等待明确的趋势信号")
+        
+        return "\n".join(report)
